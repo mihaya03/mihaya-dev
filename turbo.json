@@ -1,0 +1,33 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "ui": "tui",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+    },
+    "test:unit": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "src/**", "tests/**", "test/**"],
+      "env": ["NODE_ENV", "DATABASE_URL"]
+    },
+    "lint": {
+      "dependsOn": ["^lint"]
+    },
+    "check-types": {
+      "dependsOn": ["^check-types"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint:text": {
+      "inputs": ["**/*.md", ".textlintrc.json", ".textlint-prh.yml"]
+    },
+    "deploy": {
+      "dependsOn": ["build", "test:unit", "lint", "check-types"],
+      "cache": false
+    }
+  }
+}

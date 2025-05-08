@@ -1,0 +1,11 @@
+{
+  "extends": "../../packages/typescript-config/nextjs.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*", "../../packages/markdown"]
+    },
+    "types": ["./cloudflare-env.d.ts", "node"]
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}

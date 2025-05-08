@@ -1,0 +1,100 @@
+version: 1
+
+rules:
+  # プロジェクト固有の用語統一
+  - expected: GitHub
+    patterns:
+      - github
+      - Github
+      - GITHUB
+
+  - expected: GitHub Actions
+    patterns:
+      - github actions
+      - Github Actions
+      - GitHub actions
+
+  - expected: TypeScript
+    patterns:
+      - typescript
+      - Typescript
+      - TYPESCRIPT
+
+  - expected: JavaScript
+    patterns:
+      - javascript
+      - Javascript
+      - JAVASCRIPT
+
+  - expected: Node.js
+    patterns:
+      - nodejs
+      - NodeJS
+      - node.js
+
+  - expected: Prisma
+    patterns:
+      - prisma
+      - PRISMA
+
+  - expected: TiDB Cloud
+    patterns:
+      - tidb cloud
+      - TiDB cloud
+      - TIDB CLOUD
+
+  - expected: Cloudflare Workers
+    patterns:
+      - cloudflare workers
+      - Cloudflare workers
+      - CLOUDFLARE WORKERS
+
+  - expected: Next.js
+    patterns:
+      - nextjs
+      - NextJS
+      - next.js
+
+  - expected: Vitest
+    patterns:
+      - vitest
+      - VITEST
+
+  - expected: API
+    patterns:
+      - api
+      - Api
+
+  - expected: URL
+    patterns:
+      - url
+      - Url
+
+  - expected: DB
+    patterns:
+      - db
+      - Db
+
+  - expected: ID
+    patterns:
+      - id
+      - Id
+
+  # 技術用語の統一
+  - expected: データベース
+    patterns:
+      - DB
+      - ＤＢ
+    specs:
+      - from: DB
+        to: データベース
+
+  - expected: ワークフロー
+    patterns:
+      - workflow
+      - ワークフロウ
+
+  - expected: リポジトリ
+    patterns:
+      - repository
+      - レポジトリ

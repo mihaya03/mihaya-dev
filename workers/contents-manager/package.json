@@ -1,0 +1,27 @@
+{
+	"name": "contents-manager",
+	"version": "0.0.0",
+	"private": true,
+	"scripts": {
+		"build": "tsc",
+		"dev": "wrangler dev",
+		"deploy": "wrangler deploy",
+		"start": "wrangler dev",
+		"lint": "eslint . --ext .ts,.js",
+		"lint:fix": "eslint . --ext .ts,.js --fix",
+		"check-types": "tsc --noEmit",
+		"cf-typegen": "wrangler types",
+		"preview": "wrangler deploy --dry-run"
+	},
+	"devDependencies": {
+		"@cloudflare/workers-types": "^4.20250508.0",
+		"@repo/eslint-config": "*",
+		"@repo/typescript-config": "*",
+		"typescript": "^5.5.2",
+		"wrangler": "^4.28.1"
+	},
+	"dependencies": {
+		"@repo/db": "^1.0.0",
+		"@repo/markdown": "*"
+	}
+}

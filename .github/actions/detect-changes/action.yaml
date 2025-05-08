@@ -1,0 +1,46 @@
+name: 'Detect Changes'
+description: 'Detect changes in monorepo packages and workers'
+
+inputs:
+  base-sha:
+    description: 'Base commit SHA for comparison'
+    required: false
+    default: 'origin/main'
+
+outputs:
+  packages:
+    description: 'True if packages directory changed'
+    value: ${{ steps.changes.outputs.packages }}
+  workers:
+    description: 'True if workers directory changed'
+    value: ${{ steps.changes.outputs.workers }}
+  db:
+    description: 'True if packages/db changed'
+    value: ${{ steps.changes.outputs.db }}
+  markdown:
+    description: 'True if markdown files changed'
+    value: ${{ steps.changes.outputs.markdown }}
+  workflows:
+    description: 'True if GitHub Actions workflows changed'
+    value: ${{ steps.changes.outputs.workflows }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Detect path changes
+      uses: dorny/paths-filter@v3
+      id: changes
+      with:
+        base: ${{ inputs.base-sha }}
+        filters: |
+          packages:
+            - 'packages/**'
+          workers:
+            - 'workers/**'
+          db:
+            - 'packages/db/**'
+          markdown:
+            - '**/*.md'
+          workflows:
+            - '.github/workflows/**'
+            - '.github/actions/**'

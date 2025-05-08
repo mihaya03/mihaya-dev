@@ -1,0 +1,70 @@
+name: 'Test Package'
+description: 'Run tests for a specific package with environment setup'
+
+inputs:
+  package-name:
+    description: 'Name of the package to test (e.g., db, frontend)'
+    required: true
+  test-type:
+    description: 'Type of test to run (unit, integration)'
+    required: false
+    default: 'unit'
+  working-directory:
+    description: 'Working directory for the package'
+    required: false
+    default: ''
+  test-database-url:
+    description: 'Test database URL for integration tests'
+    required: false
+    default: ''
+
+outputs:
+  test-result:
+    description: 'Test execution result'
+    value: ${{ steps.test.outcome }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set working directory
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.working-directory }}" ]; then
+          echo "WORKING_DIR=${{ inputs.working-directory }}" >> $GITHUB_ENV
+        else
+          echo "WORKING_DIR=packages/${{ inputs.package-name }}" >> $GITHUB_ENV
+        fi
+
+    - name: Setup test environment
+      shell: bash
+      working-directory: ${{ env.WORKING_DIR }}
+      run: |
+        if [ "${{ inputs.test-type }}" = "integration" ] && [ -n "${{ inputs.test-database-url }}" ]; then
+          echo "DATABASE_URL=${{ inputs.test-database-url }}" > .env.test
+        fi
+
+    - name: Run tests
+      id: test
+      shell: bash
+      working-directory: ${{ env.WORKING_DIR }}
+      run: |
+        case "${{ inputs.test-type }}" in
+          "unit")
+            npm run test:unit
+            ;;
+          "integration")
+            NODE_ENV=test npm run test:unit
+            ;;
+          *)
+            echo "Unknown test type: ${{ inputs.test-type }}"
+            exit 1
+            ;;
+        esac
+
+    - name: Upload coverage
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-${{ inputs.package-name }}-${{ inputs.test-type }}
+        path: ${{ env.WORKING_DIR }}/coverage/
+        retention-days: 7

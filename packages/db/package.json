@@ -1,0 +1,64 @@
+{
+  "name": "@repo/db",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "check-types": "tsc --noEmit",
+    "dev": "tsc -w",
+    "lint": "eslint . --ext .ts,.js",
+    "lint:fix": "eslint . --ext .ts,.js --fix",
+    "test:unit": "NODE_ENV=test vitest run",
+    "test:watch": "NODE_ENV=test vitest",
+    "seed:test": "NODE_ENV=test npx tsx scripts/seed-test-data.ts",
+    "prepare": "husky"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@prisma/client": "^6.13.0",
+    "@prisma/extension-accelerate": "^2.0.0",
+    "@tidbcloud/prisma-adapter": "^6.6.0",
+    "@tidbcloud/serverless": "^0.2.0",
+    "neverthrow": "^8.2.0",
+    "prisma": "^6.13.0",
+    "ulid": "^2.3.0"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "*",
+    "@repo/typescript-config": "*",
+    "dotenv": "^16.4.5",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.2",
+    "textlint": "^15.2.0",
+    "textlint-rule-preset-ja-technical-writing": "^12.0.2",
+    "textlint-rule-preset-japanese": "^10.0.4",
+    "textlint-rule-prh": "^6.1.0",
+    "textlint-rule-spellcheck-tech-word": "^5.0.0",
+    "typescript": "^5.8.2",
+    "vitest": "^3.1.4"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    },
+    "./index-edge": {
+      "types": "./dist/index-edge.d.ts",
+      "import": "./dist/index-edge.js",
+      "require": "./dist/index-edge.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "index-edge": [
+        "dist/index-edge.d.ts"
+      ]
+    }
+  }
+}

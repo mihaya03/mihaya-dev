@@ -1,0 +1,95 @@
+name: Unit Tests (Fast)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/**"
+      - "workers/**"
+      - "turbo.json"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/unit-test.yaml"
+      - ".github/actions/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "packages/**"
+      - "workers/**"
+      - "turbo.json"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/unit-test.yaml"
+      - ".github/actions/**"
+  workflow_call:
+
+concurrency:
+  group: unit-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.changes.outputs.packages }}
+      workers: ${{ steps.changes.outputs.workers }}
+      markdown: ${{ steps.changes.outputs.markdown }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect changes
+        id: changes
+        uses: ./.github/actions/detect-changes
+
+  test-packages:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.packages == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup monorepo
+        uses: ./.github/actions/setup-monorepo
+
+      - name: Run fast unit tests
+        run: npx turbo run lint check-types build
+
+  lint-markdown:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.markdown == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup monorepo
+        uses: ./.github/actions/setup-monorepo
+
+      - name: Lint markdown files
+        run: npm run lint:text
+
+  test-workers:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.workers == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup monorepo
+        uses: ./.github/actions/setup-monorepo
+
+      - name: Build and type check workers
+        run: npx turbo run build check-types
+
+  lint-code:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.packages == 'true' || needs.detect-changes.outputs.workers == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup monorepo
+        uses: ./.github/actions/setup-monorepo
+
+      - name: Lint code
+        run: npx turbo run lint

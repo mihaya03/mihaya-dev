@@ -1,0 +1,65 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/db/**"
+      - "packages/markdown/**"
+      - "packages/ui/**"
+      - "workers/**"
+      - "turbo.json"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/integration-test.yaml"
+      - ".github/actions/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "packages/db/**"
+      - "packages/markdown/**"
+      - "packages/ui/**"
+      - "workers/**"
+      - "turbo.json"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/integration-test.yaml"
+      - ".github/actions/**"
+  workflow_call:
+    secrets:
+      TEST_DATABASE_URL:
+        required: true
+
+concurrency:
+  group: integration-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.changes.outputs.packages }}
+      db: ${{ steps.changes.outputs.db }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Detect changes
+        id: changes
+        uses: ./.github/actions/detect-changes
+
+  integration-test:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.db == 'true'
+    strategy:
+      matrix:
+        package: [db]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup monorepo
+        uses: ./.github/actions/setup-monorepo
+      - name: Run integration tests
+        uses: ./.github/actions/test-package
+        with:
+          package-name: ${{ matrix.package }}
+          test-type: integration
+          test-database-url: ${{ secrets.TEST_DATABASE_URL }}

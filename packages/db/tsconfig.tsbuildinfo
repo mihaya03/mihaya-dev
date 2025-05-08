@@ -1,0 +1,1 @@
+{"root":["./src/index-edge.ts","./src/index.ts","./src/config/prisma-edge.ts","./src/config/prisma.ts","./src/core/error.ts","./src/core/post.ts","./src/gateway/postGateway.ts","./src/gateway/tagGateway.ts","./src/types/prisma.ts","./src/usecase/postUsecase.ts","./src/usecase/tagUsecase.ts"],"version":"5.8.2"}

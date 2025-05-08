@@ -1,0 +1,39 @@
+name: 'Setup Monorepo'
+description: 'Setup Node.js, cache dependencies, and install packages for monorepo'
+
+inputs:
+  node-version:
+    description: 'Node.js version to use'
+    required: false
+    default: '20'
+  cache-dependency-path:
+    description: 'Path to package-lock.json for cache key'
+    required: false
+    default: 'package-lock.json'
+
+outputs:
+  cache-hit:
+    description: 'Cache hit status'
+    value: ${{ steps.cache.outputs.cache-hit }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: 'npm'
+        cache-dependency-path: ${{ inputs.cache-dependency-path }}
+
+    - name: Install dependencies
+      shell: bash
+      run: npm ci
+
+    - name: Cache Turbo
+      uses: actions/cache@v4
+      with:
+        path: .turbo
+        key: ${{ runner.os }}-turbo-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-turbo-

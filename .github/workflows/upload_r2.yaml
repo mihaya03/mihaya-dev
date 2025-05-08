@@ -1,0 +1,73 @@
+name: Sync Markdown Files to Cloudflare R2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "workers/frontend/content/**/*.md"
+
+env:
+  R2_BUCKET_NAME: ${{ secrets.CLOUDFLARE_R2_BUCKET_NAME }}
+  R2_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_ENDPOINT }}
+  AWS_DEFAULT_REGION: us-east-1
+  AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+  AWS_ENDPOINT_URL: ${{ secrets.CLOUDFLARE_R2_ENDPOINT }}
+
+jobs:
+  sync-content:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Get changed markdown files
+        id: changed-files
+        run: |
+          echo "--- Getting changed and deleted markdown files ---"
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD -- workers/frontend/content/ | grep '\.md$' || true)
+          DELETED_FILES=$(git diff --name-status HEAD~1 HEAD -- workers/frontend/content/ | grep '^D' | cut -f2 | grep '\.md$' || true)
+          echo "changed-files<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$CHANGED_FILES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "deleted-files<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$DELETED_FILES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "Changed files detected:"
+          echo "$CHANGED_FILES"
+          echo "Deleted files detected:"
+          echo "$DELETED_FILES"
+          echo "--- Finished getting files ---"
+
+      - name: Upload changed markdown files to R2
+        if: steps.changed-files.outputs.changed-files != ''
+        run: |
+          echo "--- Uploading changed markdown files ---"
+          while IFS= read -r file; do
+            if [ -n "$file" ] && [ -f "$file" ]; then
+              R2_KEY="${file#workers/frontend/content/}"
+              echo "Uploading $file to R2 as $R2_KEY"
+              aws s3 cp "$file" "s3://${{ env.R2_BUCKET_NAME }}/$R2_KEY" \
+                --endpoint-url "${{ env.R2_ENDPOINT }}" \
+                --content-type "text/markdown"
+            fi
+          done <<< "${{ steps.changed-files.outputs.changed-files }}"
+          echo "--- Finished uploading files ---"
+
+      - name: Delete removed markdown files from R2
+        if: steps.changed-files.outputs.deleted-files != ''
+        run: |
+          echo "--- Deleting removed markdown files ---"
+          while IFS= read -r file; do
+            if [ -n "$file" ]; then
+              R2_KEY="${file#workers/frontend/content/}"
+              echo "Deleting $R2_KEY from R2"
+              aws s3 rm "s3://${{ env.R2_BUCKET_NAME }}/$R2_KEY" \
+                --endpoint-url "${{ env.R2_ENDPOINT }}" || echo "Warning: File $R2_KEY not found in R2 or deletion failed."
+            fi
+          done <<< "${{ steps.changed-files.outputs.deleted-files }}"
+          echo "--- Finished deleting files ---"

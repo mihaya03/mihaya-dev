@@ -1,0 +1,168 @@
+name: Deploy Cloudflare Workers
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      contents_manager: ${{ steps.changes.outputs.contents_manager }}
+      frontend: ${{ steps.changes.outputs.frontend }}
+      packages: ${{ steps.changes.outputs.packages }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            contents_manager:
+              - 'workers/contents-manager/**'
+            frontend:
+              - 'workers/frontend/**'
+            packages:
+              - 'packages/**'
+
+  test-before-deploy:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.packages == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate --schema=packages/db/prisma/schema.prisma
+
+      - name: Test packages
+        run: npx turbo run test:unit
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_DEV }}
+
+  deploy-contents-manager:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, test-before-deploy]
+    if: github.ref == 'refs/heads/main' && (needs.detect-changes.outputs.contents_manager == 'true' || needs.detect-changes.outputs.packages == 'true') && !failure()
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create wrangler config
+        working-directory: "workers/contents-manager"
+        env:
+          CLOUDFLARE_QUEUE_NAME: ${{ secrets.CLOUDFLARE_QUEUE_NAME }}
+          R2_BUCKET_NAME: ${{ secrets.CLOUDFLARE_R2_BUCKET_NAME }}
+        run: |
+          cat > wrangler.jsonc << EOF
+          {
+            "name": "contents-manager",
+            "main": "src/index.ts",
+            "compatibility_date": "2025-07-11",
+            "compatibility_flags": ["nodejs_compat"],
+            "observability": { "enabled": true },
+            "queues": {
+              "consumers": [
+                {
+                  "queue": "${CLOUDFLARE_QUEUE_NAME}",
+                  "max_batch_size": 10,
+                  "max_batch_timeout": 30
+                }
+              ]
+            },
+            "vars": {
+              "ENVIRONMENT": "production"
+            },
+            "r2_buckets": [
+              { "binding": "R2_BUCKET", "bucket_name": "${R2_BUCKET_NAME}" }
+            ]
+          }
+          EOF
+
+      - name: Generate Cloudflare types
+        working-directory: "workers/contents-manager"
+        run: npm run cf-typegen
+
+      - name: Build and lint
+        run: npx turbo run build lint check-types --filter=contents-manager
+
+      - name: Deploy contents-manager
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: "workers/contents-manager"
+          # NOTE: Previously used --env=production without defining an env.production section.
+          # This caused creation of a second queue consumer (queue can have only one),
+          # leading to: Queue already has a consumer (code 11004).
+          # Use default environment and set ENVIRONMENT var to production instead.
+          command: deploy
+
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, test-before-deploy]
+    if: github.ref == 'refs/heads/main' && (needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.packages == 'true') && !failure()
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and lint
+        run: npx turbo run build lint check-types --filter=frontend
+
+      - name: Create wrangler config
+        working-directory: "workers/frontend"
+        run: |
+          cat > wrangler.jsonc << 'EOF'
+          {
+            "$schema": "node_modules/wrangler/config-schema.json",
+            "name": "frontend",
+            "main": ".open-next/worker.js",
+            "compatibility_date": "2025-03-01",
+            "compatibility_flags": [
+              "nodejs_compat",
+              "global_fetch_strictly_public"
+            ],
+            "assets": {
+              "binding": "ASSETS",
+              "directory": ".open-next/assets"
+            },
+            "observability": {
+              "enabled": true
+            },
+            "vars": {
+              "NODE_ENV": "production"
+            }
+          }
+          EOF
+
+      - name: Deploy frontend
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: "workers/frontend"
+          command: deploy
