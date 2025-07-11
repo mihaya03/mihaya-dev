@@ -1,0 +1,12 @@
+{
+	"extends": "../../packages/typescript-config/base.json",
+	"compilerOptions": {
+		"types": ["@cloudflare/workers-types"],
+		"allowJs": true,
+		"noEmit": true,
+		"allowSyntheticDefaultImports": true,
+		"forceConsistentCasingInFileNames": true
+	},
+	"include": ["src", "worker-configuration.d.ts"],
+	"exclude": ["node_modules", "dist"]
+}
