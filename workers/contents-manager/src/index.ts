@@ -3,13 +3,30 @@ import {
 	createPost,
 	updatePost,
 	deletePost,
-	findPostById,
+	findPostByR2FileName,
 	findTagByName,
 	createTag,
 	cleanupOrphanTags,
 } from "@repo/db/index-edge";
+import type { Tag } from "@repo/db/index-edge";
 import { parseFrontmatter } from "@repo/markdown/frontmatter";
 
+/**
+ * R2ストレージサービスからのイベント通知を表すインターフェース
+ *
+ * @interface R2EventNotification
+ * @property account - イベントに関連付けられたアカウント識別子
+ * @property action - 実行されたアクション（例："PUT"、"DELETE"）
+ * @property bucket - イベントが発生したバケット名
+ * @property object - 対象オブジェクトの詳細情報
+ * @property object.key - バケット内のオブジェクトのキー（パス）
+ * @property object.size - オブジェクトのサイズ（バイト単位）
+ * @property object.eTag - オブジェクトのエンティティタグ（ETag）
+ * @property eventTime - イベントが発生したISOタイムスタンプ
+ * @property copySource - （オプション）オブジェクトがコピーされた場合のソース情報
+ * @property copySource.bucket - ソースバケット名
+ * @property copySource.object - ソースオブジェクトキー
+ */
 interface R2EventNotification {
 	account: string;
 	action: string;
@@ -27,6 +44,12 @@ interface R2EventNotification {
 }
 
 export default {
+	/**
+	 * HTTPリクエストを処理するメソッド
+	 * @param {Request} req - HTTPリクエストオブジェクト
+	 * @param {Env} env - 環境変数
+	 * @returns {Promise<Response>} HTTPレスポンス
+	 */
 	async fetch(req, env): Promise<Response> {
 		const url = new URL(req.url);
 
@@ -55,6 +78,12 @@ export default {
 		);
 	},
 
+	/**
+	 * キューのメッセージバッチを処理するメソッド
+	 * @param {MessageBatch<R2EventNotification>} batch - R2イベント通知のメッセージバッチ
+	 * @param {Env} env - 環境変数
+	 * @returns {Promise<void>}
+	 */
 	async queue(
 		batch: MessageBatch<R2EventNotification>,
 		env: Env,
@@ -87,6 +116,13 @@ export default {
 	},
 } satisfies ExportedHandler<Env, R2EventNotification>;
 
+/**
+ * R2バケットから指定されたキーのオブジェクトを取得し、テキストとして返す
+ * @param {Env} env - 環境変数（R2_BUCKETバインディングを含む）
+ * @param {string} key - 取得するオブジェクトのキー
+ * @returns {Promise<string>} オブジェクトのテキスト内容
+ * @throws {Error} オブジェクトが見つからない場合
+ */
 const fetchFromR2 = async (env: Env, key: string): Promise<string> => {
 	const object = await env.R2_BUCKET.get(key);
 	if (!object) {
@@ -95,7 +131,13 @@ const fetchFromR2 = async (env: Env, key: string): Promise<string> => {
 	return await object.text();
 };
 
-const extractPostIdFromKey = (key: string): string => {
+/**
+ * オブジェクトキーからポストIDを抽出する
+ * @param {string} key - オブジェクトのキー（ファイルパス）
+ * @returns {string} マークダウンファイル名から拡張子を除いたポストID
+ * @throws {Error} 無効なマークダウンファイルの場合
+ */
+const extractFileBaseNameFromKey = (key: string): string => {
 	const fileName = key.split("/").pop();
 	if (!fileName || !fileName.endsWith(".md")) {
 		throw new Error(`Invalid markdown file: ${key}`);
@@ -104,6 +146,13 @@ const extractPostIdFromKey = (key: string): string => {
 };
 
 type PrismaEdgeClient = Awaited<ReturnType<typeof createPrismaEdge>>;
+/**
+ * ポスト用のタグを処理し、タグIDの配列を返す
+ * 既存のタグは検索して取得し、存在しないタグは新規作成する
+ * @param {PrismaEdgeClient} prisma - Prismaクライアント
+ * @param {string[]} tagNames - 処理するタグ名の配列
+ * @returns {Promise<string[]>} 処理されたタグのID配列
+ */
 const processTagsForPost = async (
 	prisma: PrismaEdgeClient,
 	tagNames: string[],
@@ -141,6 +190,20 @@ const processTagsForPost = async (
 	return tagIds;
 };
 
+/**
+ * マークダウンファイルのR2イベント通知を処理し、ポストデータをデータベースと同期する
+ *
+ * この関数は`.md`で終わるファイルのR2オブジェクトイベント（作成、更新、削除）を処理する。
+ * - 削除イベント（`DeleteObject`、`LifecycleDeletion`）の場合：対応するポストを削除し、孤立したタグをクリーンアップする
+ * - 作成・更新イベント（`PutObject`、`CopyObject`、`CompleteMultipartUpload`）の場合：
+ *   マークダウンファイルを解析してフロントマター（タグを含む）を抽出し、
+ *   データベース内でポストを作成または更新し、タグの関連付けを管理する
+ *
+ * @param {R2EventNotification} event - オブジェクトキーとアクションタイプを含むR2イベント通知
+ * @param {Env} env - データベースURLやR2バインディングなどの設定を含む環境オブジェクト
+ * @returns {Promise<void>} イベントが完全に処理されたときに解決されるPromise
+ * @throws データベースエラーや処理エラーが発生した場合に例外をスローする
+ */
 const processR2Event = async (
 	event: R2EventNotification,
 	env: Env,
@@ -153,38 +216,44 @@ const processR2Event = async (
 	const prisma = await createPrismaEdge(env.DATABASE_URL);
 
 	try {
-		const postId = extractPostIdFromKey(event.object.key);
+		const fileBaseName = extractFileBaseNameFromKey(event.object.key);
 
 		// Delete events: DeleteObject, LifecycleDeletion
 		if (
 			event.action === "DeleteObject" ||
 			event.action === "LifecycleDeletion"
 		) {
-			console.log(`Deleting post: ${postId}`);
+			console.log(`Deleting post by r2FileName: ${fileBaseName}`);
 
-			// Get post with tags before deletion
-			const findPostFn = findPostById(prisma);
-			const postResult = await findPostFn(postId);
+			// Look up by r2FileName first
+			const findByFileFn = findPostByR2FileName(prisma);
+			const postResult = await findByFileFn(fileBaseName);
 
 			if (postResult.isErr()) {
 				console.error(
-					`Error finding post ${postId}:`,
+					`Error finding post by r2FileName ${fileBaseName}:`,
 					postResult.error.message,
 				);
 				throw postResult.error;
 			}
 
-			const tagIds = postResult.value?.tags?.map((tag) => tag.id) || [];
-
+			const tagIds = postResult.value?.tags?.map((tag: Tag) => tag.id) || [];
+			if (!postResult.value) {
+				console.log(`No existing post for r2FileName ${fileBaseName}`);
+				return;
+			}
 			const deletePostFn = deletePost(prisma);
-			const result = await deletePostFn(postId);
+			const result = await deletePostFn(postResult.value.id);
 
 			if (result.isErr()) {
-				console.error(`Failed to delete post ${postId}:`, result.error.message);
+				console.error(
+					`Failed to delete post id=${postResult.value.id}:`,
+					result.error.message,
+				);
 				throw result.error;
 			}
 
-			console.log(`Successfully deleted post: ${postId}`);
+			console.log(`Successfully deleted post id=${postResult.value.id}`);
 
 			// Clean up orphaned tags
 			if (tagIds.length > 0) {
@@ -208,10 +277,10 @@ const processR2Event = async (
 			// Process tags from frontmatter
 			const tagNames = Array.isArray(frontmatter.tags) ? frontmatter.tags : [];
 			const tagIds = await processTagsForPost(prisma, tagNames);
-			console.log(`Processed tags for post ${postId}:`, tagNames);
+			console.log(`Processed tags for fileBaseName ${fileBaseName}:`, tagNames);
 
-			const findPostFn = findPostById(prisma);
-			const existingPostResult = await findPostFn(postId);
+			const findByFileFn = findPostByR2FileName(prisma);
+			const existingPostResult = await findByFileFn(fileBaseName);
 
 			if (existingPostResult.isErr()) {
 				console.error(
@@ -222,41 +291,47 @@ const processR2Event = async (
 			}
 
 			if (existingPostResult.value) {
-				console.log(`Updating existing post: ${postId}`);
+				console.log(
+					`Updating existing post id=${existingPostResult.value.id} (r2FileName=${fileBaseName})`,
+				);
 				const updatePostFn = updatePost(prisma);
-				const result = await updatePostFn(postId, {
+				const result = await updatePostFn(existingPostResult.value.id, {
 					title: frontmatter.title,
 					content: body,
 					tagIds,
+					r2FileName: fileBaseName,
 				});
 
 				if (result.isErr()) {
 					console.error(
-						`Failed to update post ${postId}:`,
+						`Failed to update post id=${existingPostResult.value.id}:`,
 						result.error.message,
 					);
 					throw result.error;
 				}
 
-				console.log(`Successfully updated post: ${postId}`);
+				console.log(
+					`Successfully updated post id=${existingPostResult.value.id}`,
+				);
 			} else {
-				console.log(`Creating new post: ${postId}`);
+				console.log(`Creating new post for r2FileName=${fileBaseName}`);
 				const createPostFn = createPost(prisma);
 				const result = await createPostFn({
 					title: frontmatter.title,
 					content: body,
 					tagIds,
+					r2FileName: fileBaseName,
 				});
 
 				if (result.isErr()) {
 					console.error(
-						`Failed to create post ${postId}:`,
+						`Failed to create post (r2FileName=${fileBaseName}):`,
 						result.error.message,
 					);
 					throw result.error;
 				}
 
-				console.log(`Successfully created post: ${postId}`);
+				console.log(`Successfully created post (r2FileName=${fileBaseName})`);
 			}
 		}
 	} catch (error) {

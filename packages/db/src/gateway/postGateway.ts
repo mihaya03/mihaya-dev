@@ -75,6 +75,8 @@ export type CreatePostData = Omit<
 > & {
   /** 関連付けるタグのID配列（オプション） */
   tagIds?: string[];
+  /** R2上Markdownファイル名（拡張子除去後）。重複生成防止のための一意キー */
+  r2FileName?: string | null;
 };
 
 /**
@@ -86,6 +88,8 @@ export type UpdatePostData = Partial<
 > & {
   /** 関連付けるタグのID配列（オプション） */
   tagIds?: string[];
+  /** R2上Markdownファイル名（拡張子除去後）。重複生成防止のための一意キー */
+  r2FileName?: string | null;
 };
 
 /**

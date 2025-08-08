@@ -9,5 +9,7 @@ export type Post = {
   content: string;
   createdAt: Date;
   updatedAt: Date;
+  /** R2上のMarkdownファイル名（拡張子除去後）。R2連携由来ポストでのみ利用 */
+  r2FileName?: string | null;
   tags: Tag[];
 };

@@ -13,6 +13,8 @@ model post {
   title     String
   tags      tag[]    @relation("PostTags")
   content   String
+  // R2上のMarkdownファイル名（拡張子除去後）を保持し、同一ファイル上書き時の重複生成を防ぐためのユニークキー
+  r2FileName String?  @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

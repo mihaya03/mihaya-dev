@@ -50,6 +50,28 @@ export const findPostById =
   };
 
 /**
+ * 指定されたR2ファイル名で投稿を検索する（拡張子除去後のベース名）
+ * @param prisma - Prismaクライアントインスタンス
+ * @returns 投稿検索関数（r2FileNameを受け取りResultAsyncを返す）
+ */
+export const findPostByR2FileName =
+  (prisma: GenericPrismaClient) =>
+  /**
+   * r2FileNameで投稿を検索
+   * @param r2FileName - R2上Markdownファイル名（拡張子除く）
+   * @returns 投稿データまたはnull、エラーの場合はDatabaseConnectionError
+   */
+  (r2FileName: string): ResultAsync<Post | null, DatabaseConnectionError> => {
+    return ResultAsync.fromPromise(
+      prisma.post.findUnique({
+        where: { r2FileName },
+        include: { tags: true },
+      }),
+      (e) => new DatabaseConnectionError(e instanceof Error ? e : undefined),
+    );
+  };
+
+/**
  * 指定されたタグ名で投稿を検索する
  * @param prisma - Prismaクライアントインスタンス
  * @returns タグ名で投稿を検索する関数
@@ -115,11 +137,14 @@ export const findAllPosts =
  * @returns 作成された投稿またはエラー
  * @internal
  */
+type CreatePostInput = Omit<Post, "id" | "createdAt" | "updatedAt" | "tags"> & {
+  tagIds?: string[];
+  r2FileName?: string | null;
+};
+
 const createPostAttempt = (
   prisma: GenericPrismaClient,
-  data: Omit<Post, "id" | "createdAt" | "updatedAt" | "tags"> & {
-    tagIds?: string[];
-  },
+  data: CreatePostInput,
 ): ResultAsync<Post, PostCreationError | DatabaseConnectionError> => {
   return ResultAsync.fromPromise(
     prisma.post.create({
@@ -127,6 +152,7 @@ const createPostAttempt = (
         title: data.title,
         content: data.content,
         id: ulid(),
+        r2FileName: data.r2FileName ?? undefined,
         tags: data.tagIds
           ? { connect: data.tagIds.map((id) => ({ id })) }
           : undefined,
@@ -164,9 +190,7 @@ export const createPost =
    * @returns 作成された投稿、エラーの場合はPostCreationErrorまたはDatabaseConnectionError
    */
   (
-    data: Omit<Post, "id" | "createdAt" | "updatedAt" | "tags"> & {
-      tagIds?: string[];
-    },
+    data: CreatePostInput,
   ): ResultAsync<Post, PostCreationError | DatabaseConnectionError> => {
     const MAX_RETRIES = 5;
 
@@ -206,6 +230,13 @@ export const createPost =
  * });
  * ```
  */
+type UpdatePostInput = Partial<
+  Omit<Post, "id" | "createdAt" | "updatedAt" | "tags">
+> & {
+  tagIds?: string[];
+  r2FileName?: string | null;
+};
+
 export const updatePost =
   (prisma: GenericPrismaClient) =>
   /**
@@ -216,9 +247,7 @@ export const updatePost =
    */
   (
     id: string,
-    data: Partial<Omit<Post, "id" | "createdAt" | "updatedAt" | "tags">> & {
-      tagIds?: string[];
-    },
+    data: UpdatePostInput,
   ): ResultAsync<Post, PostUpdateError | DatabaseConnectionError> => {
     return ResultAsync.fromPromise(
       prisma.post.update({
@@ -226,6 +255,7 @@ export const updatePost =
         data: {
           title: data.title,
           content: data.content,
+          r2FileName: data.r2FileName ?? undefined,
           tags: data.tagIds
             ? { set: data.tagIds.map((tagId) => ({ id: tagId })) }
             : undefined,
