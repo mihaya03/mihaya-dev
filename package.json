@@ -9,7 +9,9 @@
     "lint:text:fix": "textlint --fix \"**/*.md\"",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
-    "prepare": "husky"
+    "prepare": "husky",
+    "prisma:generate": "npm --workspace=@repo/db run generate",
+    "deploy:contents-manager": "npm run prisma:generate && npm --workspace=@repo/db run build && npm --workspace=contents-manager run build && npm --workspace=contents-manager run deploy"
   },
   "devDependencies": {
     "prettier": "^3.5.3",

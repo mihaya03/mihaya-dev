@@ -13,7 +13,9 @@
     "test:unit": "NODE_ENV=test vitest run",
     "test:watch": "NODE_ENV=test vitest",
     "seed:test": "NODE_ENV=test npx tsx scripts/seed-test-data.ts",
-    "prepare": "husky"
+    "prepare": "husky",
+    "generate": "npx prisma generate --schema prisma/schema.prisma",
+    "postinstall": "npm run generate"
   },
   "keywords": [],
   "author": "",
