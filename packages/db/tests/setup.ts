@@ -22,6 +22,8 @@ beforeAll(async () => {
     );
   }
   prisma = createPrisma(databaseUrl);
+  // Warm-up connection to avoid first-query latency
+  await prisma.$connect();
 
   // Run migrations to ensure test database has correct schema
   const { execSync } = await import("child_process");
@@ -36,9 +38,11 @@ beforeAll(async () => {
 });
 
 afterEach(async () => {
-  // Clean up test data after each test
-  await prisma.post.deleteMany();
-  await prisma.tag.deleteMany();
+  // Clean up in a single transaction (reduces round trips)
+  await prisma.$transaction([
+    prisma.post.deleteMany(),
+    prisma.tag.deleteMany(),
+  ]);
 });
 
 afterAll(async () => {

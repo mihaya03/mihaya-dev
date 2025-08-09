@@ -7,8 +7,8 @@ export default defineConfig({
     include: ["tests/**/*.test.ts", "src/**/*.test.ts"],
     exclude: ["node_modules", "dist"],
     setupFiles: ["./tests/setup.ts"],
-    hookTimeout: 60000, // 60 seconds for database setup
-    testTimeout: 30000, // 30 seconds per test
+    hookTimeout: 120000, // slow TiDB cold start tolerance
+    testTimeout: 60000, // allow slower queries in CI
     coverage: {
       reporter: ["text", "json", "html"],
       exclude: [

@@ -9,9 +9,11 @@ import { prisma } from "../setup.js";
 
 describe("postUsecase", () => {
   beforeEach(async () => {
-    // Clean up any existing test data
-    await prisma.post.deleteMany();
-    await prisma.tag.deleteMany();
+    // Already cleaned in global afterEach; keep idempotent fast cleanup
+    await prisma.$transaction([
+      prisma.post.deleteMany(),
+      prisma.tag.deleteMany(),
+    ]);
   });
 
   describe("findPostById", () => {
